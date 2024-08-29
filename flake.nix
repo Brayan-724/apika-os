@@ -32,38 +32,125 @@
       nasm
     ];
 
-    commonArgs = {
-      src = craneLib.path {path = ./.;};
-      strictDeps = true;
+    cargoArtifacts = let
+      deps = craneLib.vendorCargoDeps {
+        src = craneLib.path ./.;
+        cargoLock = "${toolchain.rust-src}/lib/rustlib/src/rust/library/Cargo.lock";
+      };
+    in
+      pkgs.stdenv.mkDerivation {
+        name = "apika-os-deps";
 
-      buildInputs = commonPkgs;
-      nativeBuildInputs = [];
-    };
+        src = pkgs.lib.cleanSourceWith {
+          src = craneLib.path ./.;
 
-    cargoArtifacts =
-      (craneLib.buildDepsOnly commonArgs)
-      // {
-        installPhase = "prepareAndInstallCargoArtifactsDir";
+          filter = path: type:
+            pkgs.lib.any (suffix: pkgs.lib.hasSuffix suffix path) [
+              ".toml"
+              ".lock"
+              ".json"
+            ];
+        };
+
+        nativeBuildInputs = [
+          (toolchain.withComponents
+            [
+              "cargo"
+              "rust-src"
+              "rustc"
+            ])
+        ];
+
+        buildPhase = let
+          dummyrs = pkgs.writeText "dummy.rs" ''
+            #![allow(clippy::all)]
+            #![allow(dead_code)]
+            #![no_std]
+            #![no_main]
+
+            #[allow(unused_extern_crates)]
+            extern crate core;
+
+            #[panic_handler]
+            fn panic(_info: &::core::panic::PanicInfo<'_>) -> ! {
+                loop {}
+            }
+
+            #[no_mangle]
+            extern "C" fn _start() {}
+          '';
+        in ''
+          mkdir /build/.cargo || exit 1
+          ln -s ${deps}/config.toml /build/.cargo/config.toml || exit 1
+
+          mkdir -p src
+          ln -s ${dummyrs} src/main.rs
+
+          CARGO_TARGET_DIR=/build/target cargo build --target ./x86_64-am-kernel.json -Zbuild-std=core,alloc -Zbuild-std-features=compiler-builtins-mem
+        '';
+
+        installPhase = ''
+          mkdir -p $out
+          ln -s ${deps}/config.toml $out/config.toml
+          cp -r --no-preserve=mode,ownership /build/target $out/target
+        '';
       };
 
-    apika-os = craneLib.mkCargoDerivation {
-      inherit cargoArtifacts;
+    apika-os = pkgs.stdenv.mkDerivation rec {
+      name = "apika-os";
 
-      src = craneLib.path ./.;
+      src = builtins.path {path = ./.;};
 
-      pnameSuffix = "-apika-os";
+      nativeBuildInputs =
+        commonPkgs
+        ++ [
+          (toolchain.withComponents
+            [
+              "cargo"
+              "rust-src"
+              "rustc"
+            ])
+        ];
 
-      buildPhaseCargoCommand = ''
-        echo "Hola :crabWave:";
+      buildPhase = ''
+        mkdir /build/.cargo || exit 1
+        ls ${cargoArtifacts} -al
+        cp ${cargoArtifacts}/config.toml /build/.cargo/config.toml || exit 1
+
+        mkdir build
+
+        cp -r --no-preserve=mode,ownership ${cargoArtifacts}/target /build/target
+        CARGO_TARGET_DIR=/build/target cargo rustc -- --emit=obj -o apika-os || exit 1
+        mv apika-os*.o build/kernel.o
+
+        nasm -f elf64 grub/boot.S -o build/grub.o
+
+        ld -m elf_x86_64 -T grub/linker.ld -o build/kernel build/grub.o build/kernel.o
+
+        mkdir -p iso/boot/grub
+
+        mv grub/grub.cfg iso/boot/grub/
+        mv build/kernel.o iso/boot/kernel
+
+        grub-mkrescue -o ${name}.iso iso
       '';
 
-      nativeBuildInputs = [];
+      installPhase = ''
+        mkdir -p $out
+        cp --no-preserve=mode,ownership ${name}.iso $out/${name}.iso
+      '';
     };
-    # apika-os = craneLib.buildPackage (commonArgs
-    #   // {
-    #     inherit cargoArtifacts;
-    #   });
   in {
+    apps.${system}.default = {
+      type = "app";
+      program = let
+        script = pkgs.writeShellScript "run-apika-os.sh" ''
+          cp --no-preserve=mode,ownership ${apika-os}/apika-os.iso apika-os.iso
+          ${pkgs.qemu}/bin/qemu-system-x86_64 apika-os.iso
+        '';
+      in "${script}";
+    };
+
     packages.${system}.default = apika-os;
 
     # packages.${system}.default = pkgs.rustPlatform.buildRustPackage {
