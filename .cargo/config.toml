@@ -1,0 +1,9 @@
+[build]
+# build-stage = 1
+target = ["./x86_64-am-kernel.json"]
+
+[unstable]
+bindeps = true
+build-std = ["core", "alloc"]
+build-std-features = ["compiler-builtins-mem"]
+

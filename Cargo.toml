@@ -1,0 +1,19 @@
+
+[package]
+name = "apika-os"
+version = "0.1.0"
+edition = "2021"
+
+[profile.dev]
+panic = "abort"
+opt-level = 2
+
+[profile.release]
+panic = "abort"
+opt-level = 3
+
+[dependencies]
+# bootloader = "0.9.8"
+
+# [build-dependencies]
+# compiler_builtins = { git = "https://github.com/rust-lang/compiler-builtins", features = ["mem"] }
