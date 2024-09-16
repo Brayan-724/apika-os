@@ -14,9 +14,9 @@ build: clean
   @echo "------------------------------"
   @echo "        Building GRUB"
   @echo "------------------------------"
-  nasm -f elf64 grub/boot.S -o build/grub.o
+  nasm -f elf32 grub/boot.S -o build/grub.o
 
-  ld -m elf_x86_64 -T grub/linker.ld -o build/kernel build/grub.o build/kernel.o
+  ld -m elf_i386 -T grub/linker.ld -o build/kernel build/grub.o build/kernel.o
 
   @mkdir -p iso/boot/grub
 
