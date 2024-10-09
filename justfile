@@ -7,7 +7,7 @@ build: clean
   @echo "------------------------------"
   @echo "      Compiling Kernel"
   @echo "------------------------------"
-  cargo rustc -- --emit=obj -o apika-os
+  cargo rustc -- -O -C link-args=-no-pie -C relocation-model=static --emit=obj -o apika-os
   @mv apika-os*.o build/kernel.o
   @rm apika-os* libapika_os* &> /dev/null
 
