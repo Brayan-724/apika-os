@@ -15,7 +15,10 @@
   }: let
     system = "x86_64-linux";
     pkgs = nixpkgs.legacyPackages.${system};
-    toolchain = fenix.packages.${system}.complete;
+    toolchain = fenix.packages.${system}.fromToolchainFile {
+      file = ./rust-toolchain.toml;
+      sha256 = "sha256-NScYMl3lvtfiVqXyjPKc4mAnmwvhn4eAuXEum6bVxR8=";
+    };
   in {
     devShells.${system}.default = pkgs.mkShell {
       buildInputs = with pkgs; [
@@ -30,12 +33,7 @@
         # Task
         just
 
-        (toolchain.withComponents [
-          "cargo"
-          "rust-src"
-          "rustc"
-          "rust-analyzer"
-        ])
+        toolchain
       ];
     };
   };
